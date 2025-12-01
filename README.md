@@ -38,6 +38,20 @@ Las variables de entorno permiten ajustar el comportamiento:
 - `SMTP_HOST` / `SMTP_PORT`: host y puerto SMTP (por defecto `smtp.gmail.com:587`).
 - `SMTP_USERNAME` / `SMTP_PASSWORD`: credenciales para autenticarte en SMTP (requeridas para enviar email).
 
+### Configurar alertas por correo (ejemplo con Gmail)
+
+1. Crea o usa una contraseña de aplicación en tu cuenta de Gmail (no uses tu contraseña principal).
+2. Exporta las variables antes de arrancar el servidor:
+
+```bash
+export SMTP_USERNAME="tu_correo@gmail.com"
+export SMTP_PASSWORD="tu_contraseña_de_aplicación"
+export EMAIL_SENDER="tu_correo@gmail.com"
+export EMAIL_RECIPIENTS="alexropi00@gmail.com"
+```
+
+El endpoint `/health` devuelve `smtp_ready: yes` cuando detecta destinatarios y credenciales SMTP configuradas.
+
 ### Ejemplo de despliegue en Raspberry Pi 4B (4 GB)
 
 ```bash

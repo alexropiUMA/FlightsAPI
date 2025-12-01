@@ -27,7 +27,19 @@ class NotificationService:
             recipients,
         )
 
-        if not self.recipients or not config.SMTP_HOST or not config.SMTP_USERNAME or not config.SMTP_PASSWORD:
+        if not self.recipients or not config.SMTP_CONFIGURED:
+            missing = []
+            if not self.recipients:
+                missing.append("destinatarios EMAIL_RECIPIENTS")
+            if not config.EMAIL_SENDER:
+                missing.append("EMAIL_SENDER")
+            if not config.SMTP_HOST:
+                missing.append("SMTP_HOST")
+            if not config.SMTP_USERNAME:
+                missing.append("SMTP_USERNAME")
+            if not config.SMTP_PASSWORD:
+                missing.append("SMTP_PASSWORD")
+            logger.info("Aviso: alerta no enviada por SMTP (faltan %s)", ", ".join(missing))
             return
 
         message = EmailMessage()

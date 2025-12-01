@@ -101,7 +101,11 @@ async def on_shutdown() -> None:
 
 @app.get("/health")
 async def health() -> Dict[str, str]:
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "monitor_interval_minutes": str(config.DEFAULT_CHECK_INTERVAL_MINUTES),
+        "smtp_ready": "yes" if (config.SMTP_CONFIGURED and config.EMAIL_RECIPIENTS) else "no",
+    }
 
 
 @app.get("/targets", response_model=List[FlightSearchRequest])
