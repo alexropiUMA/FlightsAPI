@@ -87,7 +87,7 @@ Para mantenerlo en ejecución tras cerrar la terminal puedes usar `tmux`, `scree
 
 ## Personalización del proveedor
 
-- **Amadeus**: si `AMADEUS_CLIENT_ID` y `AMADEUS_CLIENT_SECRET` están definidos, se usa `AmadeusFlightProvider` (`app/services/amadeus_provider.py`). Se solicitan hasta 10 resultados (`max=10`) con moneda EUR y se filtra por escala preferida y duración máxima de escala. Cada oferta incluye aerolínea, precio, divisa, segmentos con horarios y enlaces de compra rápidos. El precio mostrado usa `grandTotal` de Amadeus (importe total con impuestos); si no está disponible, se recurre a `total`.
+- **Amadeus**: si `AMADEUS_CLIENT_ID` y `AMADEUS_CLIENT_SECRET` están definidos, se usa `AmadeusFlightProvider` (`app/services/amadeus_provider.py`). Se solicitan hasta 10 resultados (`max=10`) con moneda EUR y se filtra por escala preferida y duración máxima de escala. Cada oferta incluye aerolínea, precio, divisa, segmentos con horarios y enlaces de compra rápidos. El precio mostrado usa `grandTotal` de Amadeus (importe total con impuestos); si no está disponible, se recurre a `total`. Los importes devueltos por Amadeus son **por pasajero (1 adulto) en el instante de la consulta** y pueden revalorizarse en la web de compra si cambia la disponibilidad o la paridad de divisa.
 - **Mock**: en ausencia de credenciales, `MockFlightProvider` (`app/services/mock_provider.py`) genera datos sintéticos (no provienen de ninguna API real) manteniendo la misma forma de los datos.
 
 ## Notificaciones

@@ -560,6 +560,7 @@ def build_homepage() -> str:
                 </div>
                 <div class="price">${offer ? `${offer.total_price.toFixed(2)} ${offer.currency} · ${offer.airline}` : 'Sin oferta disponible aún'}</div>
                 <div class="small">${offer ? `Proveedor: ${offer.provider} · Escala preferida: ${offer.preferred_stop_matched ? 'sí' : 'no'}` : 'Esperando datos reales de Amadeus'}</div>
+                <div class="small">${offer?.price_note || 'Precio informado por Amadeus por pasajero; confirma en la página de compra.'}</div>
                 <div class="segments">${segments}</div>
                 <div class="links">${links || '<span class="small">En cuanto llegue una oferta verás aquí enlaces de compra (Google Flights, Skyscanner, Kayak).</span>'}</div>
                 <div class="meta"><span class="small">Último estado</span><span class="small">${status.checked_at ? formatTime(status.checked_at) : '—'}</span></div>

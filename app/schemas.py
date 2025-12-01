@@ -24,6 +24,7 @@ class FlightOffer(BaseModel):
     airline: str
     currency: str
     total_price: float
+    price_note: Optional[str] = Field(None, description="Clarifies how the price was quoted")
     segments: List[FlightSegment]
     preferred_stop_matched: bool
     purchase_links: List[PurchaseLink] = Field(default_factory=list)

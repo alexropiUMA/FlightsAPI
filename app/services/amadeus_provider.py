@@ -65,7 +65,8 @@ class AmadeusFlightProvider(FlightProvider):
         for offer in data:
             try:
                 price_block = offer.get("price", {})
-                total_price = float(price_block.get("grandTotal") or price_block.get("total"))
+                total_price_raw = price_block.get("grandTotal") or price_block.get("total")
+                total_price = float(total_price_raw)
                 currency = price_block["currency"]
                 itineraries = offer.get("itineraries", [])
                 segments = self._build_segments(itineraries)
@@ -78,6 +79,10 @@ class AmadeusFlightProvider(FlightProvider):
 
             airline = self._first_marketing_carrier(itineraries) or "Desconocida"
             purchase_links = self._build_purchase_links(request)
+            note = (
+                "Precio por 1 adulto según Amadeus (grandTotal, con impuestos) en el momento de la búsqueda; "
+                "puede variar al finalizar la compra si cambia la disponibilidad."
+            )
 
             offers.append(
                 FlightOffer(
@@ -85,6 +90,7 @@ class AmadeusFlightProvider(FlightProvider):
                     airline=airline,
                     currency=currency,
                     total_price=total_price,
+                    price_note=note,
                     segments=segments,
                     preferred_stop_matched=preferred_stop_matched,
                     purchase_links=purchase_links,
