@@ -64,8 +64,9 @@ class AmadeusFlightProvider(FlightProvider):
         offers: List[FlightOffer] = []
         for offer in data:
             try:
-                total_price = float(offer["price"]["total"])
-                currency = offer["price"]["currency"]
+                price_block = offer.get("price", {})
+                total_price = float(price_block.get("grandTotal") or price_block.get("total"))
+                currency = price_block["currency"]
                 itineraries = offer.get("itineraries", [])
                 segments = self._build_segments(itineraries)
             except (KeyError, TypeError, ValueError) as exc:
