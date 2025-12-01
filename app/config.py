@@ -12,6 +12,7 @@ DEFAULT_PREFERRED_STOP = "MAD"
 DEFAULT_MAX_LAYOVER_HOURS = 5.0
 DEFAULT_PRICE_THRESHOLD = float(os.getenv("PRICE_THRESHOLD", 1000))
 DEFAULT_CHECK_INTERVAL_MINUTES = int(os.getenv("CHECK_INTERVAL_MINUTES", 360))
+LOCAL_TIMEZONE = os.getenv("LOCAL_TIMEZONE", "Europe/Madrid")
 
 EMAIL_SENDER = os.getenv("EMAIL_SENDER", "alerts@example.com")
 EMAIL_RECIPIENTS = [email.strip() for email in os.getenv("EMAIL_RECIPIENTS", "alexropi00@gmail.com").split(",") if email.strip()]

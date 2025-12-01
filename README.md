@@ -6,8 +6,8 @@ API ligera en FastAPI para monitorizar vuelos Málaga (AGP) → Quito (UIO) con 
 - **Ventanas de fechas preconfiguradas**: 1 julio–20 julio, 1 julio–21 julio, 1 julio–19 julio, 1 julio–18 julio, 30 junio–19 julio, 30 junio–20 julio, 30 junio–18 julio (año 2026).
 - **Filtro de escala**: se privilegia Madrid y se limita el tiempo de escala a 5 h.
 - **Monitor de precios**: tarea de fondo que revisa periódicamente (por defecto cada 6 horas para no agotar las 1000 peticiones/mes) y genera alertas cuando el mejor precio está por debajo de 1000 €.
-- **Proveedor Amadeus**: si defines credenciales, las búsquedas reales se realizan contra Amadeus Self-Service (sino, se usa el proveedor simulado).
-- **Proveedor simulado**: `MockFlightProvider` devuelve resultados deterministas para facilitar pruebas locales.
+- **Proveedor Amadeus**: se consumen datos reales vía Amadeus Self-Service (obligatorio; sin credenciales no se ejecutan búsquedas).
+- **Proveedor simulado**: disponible sólo para desarrollo (`MockFlightProvider`), pero no se usa automáticamente.
 - **Enlaces rápidos de compra**: cada oferta incluye accesos a búsquedas en Google Flights, Skyscanner y Kayak para que compares precios reales.
 
 ## Requisitos
@@ -34,8 +34,9 @@ uvicorn app.main:app --reload
 Las variables de entorno permiten ajustar el comportamiento:
 
 - `PRICE_THRESHOLD`: umbral de alerta (por defecto 1000).
-- `CHECK_INTERVAL_MINUTES`: minutos entre ejecuciones del monitor (por defecto 360 = 6 h, pensado para no agotar las 1000 peticiones mensuales; puedes bajarlo si usas el mock).
-- `AMADEUS_CLIENT_ID` / `AMADEUS_CLIENT_SECRET`: credenciales de Amadeus Self-Service. Si están presentes, el proveedor real se activará automáticamente.
+- `CHECK_INTERVAL_MINUTES`: minutos entre ejecuciones del monitor (por defecto 360 = 6 h, pensado para no agotar las 1000 peticiones mensuales).
+- `AMADEUS_CLIENT_ID` / `AMADEUS_CLIENT_SECRET`: credenciales de Amadeus Self-Service. Sin ellas la API no lanzará búsquedas (sólo mostrará el estado en `/health`).
+- `LOCAL_TIMEZONE`: zona horaria para mostrar horarios en la UI (por defecto `Europe/Madrid`, UTC+1 en verano).
 - `EMAIL_RECIPIENTS`: lista separada por comas de destinatarios para alertas (por defecto `alexropi00@gmail.com`).
 - `EMAIL_SENDER`: dirección del remitente de los correos.
 - `SMTP_HOST` / `SMTP_PORT`: host y puerto SMTP (por defecto `smtp.gmail.com:587`).
@@ -71,7 +72,7 @@ export EMAIL_RECIPIENTS="alexropi00@gmail.com"
 # Ajusta el intervalo (6 horas por defecto para 1000 peticiones/mes)
 export CHECK_INTERVAL_MINUTES=360
 
-# Activa Amadeus (opcional, usa tus credenciales)
+# Activa Amadeus (obligatorio para datos reales)
 export AMADEUS_CLIENT_ID="tu_client_id"
 export AMADEUS_CLIENT_SECRET="tu_client_secret"
 

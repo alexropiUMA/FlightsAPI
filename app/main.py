@@ -5,15 +5,15 @@ import contextlib
 import json
 import logging
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import AsyncGenerator, Dict, List, Optional
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse
 
 from app import config
 from app.schemas import FlightOffer, FlightSearchRequest, PriceAlert
 from app.services.flight_provider import FlightProvider
-from app.services.mock_provider import MockFlightProvider
 from app.services.amadeus_provider import AmadeusFlightProvider, ProviderError
 from app.services.notification import NotificationService
 
@@ -44,18 +44,13 @@ state = AppState(
 
 
 def build_provider() -> FlightProvider:
-    if config.AMADEUS_CONFIGURED:
-        try:
-            logger.info("Usando proveedor Amadeus")
-            return AmadeusFlightProvider.from_env(
-                client_id=config.AMADEUS_CLIENT_ID,
-                client_secret=config.AMADEUS_CLIENT_SECRET,
-            )
-        except ProviderError as exc:
-            logger.error("No se pudo inicializar Amadeus: %s", exc)
-
-    logger.info("Usando proveedor simulado (mock)")
-    return MockFlightProvider()
+    if not config.AMADEUS_CONFIGURED:
+        raise ProviderError("amadeus", "Faltan credenciales: solo se permiten datos reales")
+    logger.info("Usando proveedor Amadeus (solo datos reales)")
+    return AmadeusFlightProvider.from_env(
+        client_id=config.AMADEUS_CLIENT_ID,
+        client_secret=config.AMADEUS_CLIENT_SECRET,
+    )
 
 
 async def monitor_prices():
@@ -107,7 +102,12 @@ async def monitor_prices():
 
 @app.on_event("startup")
 async def on_startup() -> None:
-    state.provider = build_provider()
+    try:
+        state.provider = build_provider()
+    except ProviderError as exc:
+        logger.error("%s", exc)
+        return
+
     state.monitor_task = asyncio.create_task(monitor_prices())
 
 
@@ -126,6 +126,7 @@ async def health() -> Dict[str, str]:
         "monitor_interval_minutes": str(config.DEFAULT_CHECK_INTERVAL_MINUTES),
         "smtp_ready": "yes" if (config.SMTP_CONFIGURED and config.EMAIL_RECIPIENTS) else "no",
         "provider": state.provider.__class__.__name__ if state.provider else "uninitialized",
+        "amadeus_ready": "yes" if config.AMADEUS_CONFIGURED else "no",
     }
 
 
@@ -136,6 +137,8 @@ async def list_targets() -> List[FlightSearchRequest]:
 
 @app.get("/offers")
 async def get_latest_offers() -> Dict[str, FlightOffer]:
+    if state.provider is None:
+        raise HTTPException(status_code=503, detail="Proveedor Amadeus no configurado")
     if not state.latest_offers:
         await monitor_once()
     return state.latest_offers
@@ -158,7 +161,7 @@ async def monitor_once() -> None:
 async def search_custom(request: FlightSearchRequest) -> List[FlightOffer]:
     normalized = normalize_request(request)
     if state.provider is None:
-        raise RuntimeError("Proveedor no inicializado")
+        raise HTTPException(status_code=503, detail="Proveedor Amadeus no configurado")
     offers = await state.provider.search_round_trip(normalized)
     if offers:
         key = f"{normalized.departure_date}:{normalized.return_date}"
@@ -213,7 +216,7 @@ def normalize_request(request: FlightSearchRequest) -> FlightSearchRequest:
 
 def record_offer(key: str, offer: FlightOffer) -> None:
     state.latest_offers[key] = offer
-    state.latest_updated_at[key] = datetime.utcnow().isoformat()
+    state.latest_updated_at[key] = datetime.now(ZoneInfo(config.LOCAL_TIMEZONE)).isoformat()
     message = json.dumps(
         {
             "type": "offer",
@@ -341,7 +344,7 @@ def build_homepage() -> str:
           <div class="pill">Málaga ➜ Quito</div>
           <div>
             <div style="font-size:22px;font-weight:800;">Ofertas en vivo</div>
-            <div style="color:var(--muted);font-size:14px;">Actualizaciones automáticas cada ciclo del monitor</div>
+            <div style="color:var(--muted);font-size:14px;">Datos reales (Amadeus) · Zona horaria {config.LOCAL_TIMEZONE}</div>
           </div>
         </div>
         <div id="connection" class="badge">⏳ Conectando</div>
@@ -363,6 +366,10 @@ def build_homepage() -> str:
         const grid = document.getElementById('offersGrid');
         const connection = document.getElementById('connection');
         const toast = document.getElementById('toast');
+        const TIMEZONE = '{config.LOCAL_TIMEZONE}';
+
+        const formatDateTime = (value) => value ? new Date(value).toLocaleString('es-ES', { timeZone: TIMEZONE }) : '—';
+        const formatTime = (value) => value ? new Date(value).toLocaleTimeString('es-ES', { timeZone: TIMEZONE }) : '—';
 
         function showToast(text) {
           toast.textContent = text;
@@ -394,19 +401,36 @@ def build_homepage() -> str:
                   ${offer.segments.map(seg => `
                     <div class="segment">
                       <div>${seg.origin} → ${seg.destination}</div>
-                      <div class="small">${new Date(seg.departure_time).toLocaleString()} · ${seg.layover_hours ? seg.layover_hours + 'h escala' : ''}</div>
+                      <div class="small">${formatDateTime(seg.departure_time)} · ${seg.layover_hours ? seg.layover_hours + 'h escala' : ''}</div>
                     </div>`).join('')}
                 </div>
                 <div class="links">${links || '<span class="small">Añade un proveedor real para enlaces directos.</span>'}</div>
-                <div class="meta"><span class="small">Última actualización</span><span class="small">${offer.updated_at ? new Date(offer.updated_at).toLocaleTimeString() : '—'}</span></div>
+                <div class="meta"><span class="small">Última actualización</span><span class="small">${formatTime(offer.updated_at)}</span></div>
               </div>
             `;
           }).join('');
         }
 
+        async function checkHealth() {
+          try {
+            const res = await fetch('/health');
+            const data = await res.json();
+            if (data.amadeus_ready !== 'yes') {
+              connection.textContent = '❌ Amadeus no configurado';
+              connection.classList.remove('good');
+            } else {
+              connection.textContent = '🟢 Amadeus listo';
+              connection.classList.add('good');
+            }
+          } catch (err) {
+            connection.textContent = '⚠️ Sin conexión';
+            connection.classList.remove('good');
+          }
+        }
+
         function connectSSE() {
           const es = new EventSource('/events/offers');
-          es.onopen = () => { connection.textContent = '🟢 Tiempo real'; connection.classList.add('good'); };
+          es.onopen = () => { connection.textContent = '🟢 Tiempo real (Amadeus)'; connection.classList.add('good'); };
           es.onerror = () => { connection.textContent = '⚠️ Reconectando'; connection.classList.remove('good'); };
           es.onmessage = (event) => {
             if (!event.data) return;
@@ -432,6 +456,7 @@ def build_homepage() -> str:
         }
 
         renderOffers({});
+        checkHealth();
         connectSSE();
       </script>
     </body>
