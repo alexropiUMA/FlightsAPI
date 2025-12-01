@@ -14,6 +14,7 @@ from app import config
 from app.schemas import FlightOffer, FlightSearchRequest, PriceAlert
 from app.services.flight_provider import FlightProvider
 from app.services.mock_provider import MockFlightProvider
+from app.services.amadeus_provider import AmadeusFlightProvider, ProviderError
 from app.services.notification import NotificationService
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -37,12 +38,30 @@ class AppState:
 
 
 state = AppState(
-    provider=MockFlightProvider(),
+    provider=None,  # initialized on startup
     notifier=NotificationService(recipients=config.EMAIL_RECIPIENTS),
 )
 
 
+def build_provider() -> FlightProvider:
+    if config.AMADEUS_CONFIGURED:
+        try:
+            logger.info("Usando proveedor Amadeus")
+            return AmadeusFlightProvider.from_env(
+                client_id=config.AMADEUS_CLIENT_ID,
+                client_secret=config.AMADEUS_CLIENT_SECRET,
+            )
+        except ProviderError as exc:
+            logger.error("No se pudo inicializar Amadeus: %s", exc)
+
+    logger.info("Usando proveedor simulado (mock)")
+    return MockFlightProvider()
+
+
 async def monitor_prices():
+    if state.provider is None:
+        logger.error("Proveedor no inicializado; deteniendo monitor")
+        return
     logger.info("Iniciando monitor de precios para %s combinaciones", len(config.TARGET_WINDOWS))
     while True:
         for window in config.TARGET_WINDOWS:
@@ -88,6 +107,7 @@ async def monitor_prices():
 
 @app.on_event("startup")
 async def on_startup() -> None:
+    state.provider = build_provider()
     state.monitor_task = asyncio.create_task(monitor_prices())
 
 
@@ -105,6 +125,7 @@ async def health() -> Dict[str, str]:
         "status": "ok",
         "monitor_interval_minutes": str(config.DEFAULT_CHECK_INTERVAL_MINUTES),
         "smtp_ready": "yes" if (config.SMTP_CONFIGURED and config.EMAIL_RECIPIENTS) else "no",
+        "provider": state.provider.__class__.__name__ if state.provider else "uninitialized",
     }
 
 
@@ -121,6 +142,9 @@ async def get_latest_offers() -> Dict[str, FlightOffer]:
 
 
 async def monitor_once() -> None:
+    if state.provider is None:
+        logger.error("Proveedor no inicializado; no se ejecuta búsqueda")
+        return
     for window in config.TARGET_WINDOWS:
         normalized = normalize_request(window)
         offers = await state.provider.search_round_trip(normalized)
@@ -133,6 +157,8 @@ async def monitor_once() -> None:
 @app.post("/search", response_model=List[FlightOffer])
 async def search_custom(request: FlightSearchRequest) -> List[FlightOffer]:
     normalized = normalize_request(request)
+    if state.provider is None:
+        raise RuntimeError("Proveedor no inicializado")
     offers = await state.provider.search_round_trip(normalized)
     if offers:
         key = f"{normalized.departure_date}:{normalized.return_date}"
