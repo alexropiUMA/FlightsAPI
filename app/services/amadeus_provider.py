@@ -34,21 +34,32 @@ class AmadeusFlightProvider(FlightProvider):
         return cls(client_id=client_id, client_secret=client_secret)
 
     async def search_round_trip(self, request: FlightSearchRequest) -> List[FlightOffer]:
-        response = await asyncio.to_thread(
-            self.client.shopping.flight_offers_search.get,
-            originLocationCode=request.origin,
-            destinationLocationCode=request.destination,
-            departureDate=request.departure_date.isoformat(),
-            returnDate=request.return_date.isoformat(),
-            adults=1,
-            currencyCode=self.currency,
-            max=self.max_results,
-        )
+        try:
+            response = await asyncio.to_thread(
+                self.client.shopping.flight_offers_search.get,
+                originLocationCode=request.origin,
+                destinationLocationCode=request.destination,
+                departureDate=request.departure_date.isoformat(),
+                returnDate=request.return_date.isoformat(),
+                adults=1,
+                currencyCode=self.currency,
+                max=self.max_results,
+            )
+        except ResponseError as exc:  # pragma: no cover - transport error surfaced to caller
+            status = getattr(exc, "response", None)
+            status_code = getattr(status, "status_code", None)
+            result = getattr(status, "result", None)
+            message = f"Amadeus error {status_code or ''}: {result or exc}"
+            raise ProviderError("amadeus", message) from exc
 
         try:
             data = response.data
         except ResponseError as exc:  # pragma: no cover - transport error surfaced to caller
-            raise ProviderError("amadeus", str(exc)) from exc
+            status = getattr(exc, "response", None)
+            status_code = getattr(status, "status_code", None)
+            result = getattr(status, "result", None)
+            message = f"Amadeus error {status_code or ''}: {result or exc}"
+            raise ProviderError("amadeus", message) from exc
 
         offers: List[FlightOffer] = []
         for offer in data:

@@ -49,3 +49,9 @@ class PriceAlert(BaseModel):
     best_price: float
     below_threshold: bool
     message: str
+
+
+class MonitorStatus(BaseModel):
+    status: str = Field(..., description="Short machine-readable status for the window (ok/error/empty/pending)")
+    detail: str = Field(..., description="Human readable explanation of the latest check")
+    checked_at: str = Field(..., description="ISO timestamp (config timezone) of the last attempt")

@@ -9,6 +9,7 @@ API ligera en FastAPI para monitorizar vuelos Málaga (AGP) → Quito (UIO) con 
 - **Proveedor Amadeus**: se consumen datos reales vía Amadeus Self-Service (obligatorio; sin credenciales no se ejecutan búsquedas).
 - **Proveedor simulado**: disponible sólo para desarrollo (`MockFlightProvider`), pero no se usa automáticamente.
 - **Enlaces rápidos de compra**: cada oferta incluye accesos a búsquedas en Google Flights, Skyscanner y Kayak para que compares precios reales.
+- **Estado en vivo y motivos**: la UI muestra cada ventana de fechas (las 7 combinaciones) con el último estado: precios reales, ausencia de resultados, o errores/rate limit (429) reportados por Amadeus.
 
 ## Requisitos
 - Python 3.9–3.13
@@ -28,6 +29,7 @@ uvicorn app.main:app --reload
 - `/health`: estado básico de la API.
 - `/targets`: devuelve las combinaciones de fechas configuradas.
 - `/offers`: consulta el mejor precio almacenado por el monitor (si aún no hay datos, ejecuta una búsqueda rápida).
+- `/status`: devuelve, para cada ventana, el último estado (ok, sin resultados, error/429) y los precios almacenados si existen.
 - `/search`: POST con un cuerpo `FlightSearchRequest` para lanzar búsquedas ad-hoc.
 - `/` (UI): panel web ligero con las ofertas, compañía aérea, formulario de búsqueda y actualizaciones en tiempo real vía SSE.
 
@@ -90,3 +92,9 @@ Para mantenerlo en ejecución tras cerrar la terminal puedes usar `tmux`, `scree
 ## Notificaciones
 
 `NotificationService` (en `app/services/notification.py`) registra las alertas en los logs. Amplíalo con email, SMS o push añadiendo la lógica en `send_price_alert`.
+
+## Diagnóstico: ¿por qué no veo las 7 ofertas?
+
+- El monitor sigue consultando las 7 combinaciones, pero ahora **solo muestra datos reales de Amadeus**. Si un tramo no aparece es porque Amadeus devolvió 0 resultados (sin disponibilidad o caché reciente) o respondió con error.
+- Visita `/status` o el panel en `/`: cada tarjeta enseña el último estado y la hora local. Si Amadeus limita por exceso de peticiones (429), lo verás indicado y el monitor reintentará según `CHECK_INTERVAL_MINUTES` (6 h por defecto).
+- Los enlaces de compra (Google Flights, Skyscanner, Kayak) aparecen automáticamente en la tarjeta en cuanto llega una oferta real para ese rango de fechas.

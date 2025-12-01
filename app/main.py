@@ -12,7 +12,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse
 
 from app import config
-from app.schemas import FlightOffer, FlightSearchRequest, PriceAlert
+from app.schemas import FlightOffer, FlightSearchRequest, PriceAlert, MonitorStatus
 from app.services.flight_provider import FlightProvider
 from app.services.amadeus_provider import AmadeusFlightProvider, ProviderError
 from app.services.notification import NotificationService
@@ -33,6 +33,8 @@ class AppState:
         self.notifier = notifier
         self.latest_offers: Dict[str, FlightOffer] = {}
         self.latest_updated_at: Dict[str, str] = {}
+        self.latest_status: Dict[str, MonitorStatus] = {}
+        self.target_windows: Dict[str, FlightSearchRequest] = {}
         self.monitor_task: Optional[asyncio.Task] = None
         self.subscribers: List[asyncio.Queue[str]] = []
 
@@ -41,6 +43,15 @@ state = AppState(
     provider=None,  # initialized on startup
     notifier=NotificationService(recipients=config.EMAIL_RECIPIENTS),
 )
+
+
+def window_key(request: FlightSearchRequest) -> str:
+    return f"{request.departure_date}:{request.return_date}"
+
+
+def seed_target_windows() -> None:
+    for window in config.TARGET_WINDOWS:
+        state.target_windows[window_key(window)] = window
 
 
 def build_provider() -> FlightProvider:
@@ -61,20 +72,38 @@ async def monitor_prices():
     while True:
         for window in config.TARGET_WINDOWS:
             normalized = normalize_request(window)
-            offers = await state.provider.search_round_trip(normalized)
+            key = window_key(normalized)
+            record_status(key, "running", "Consultando Amadeus en tiempo real…")
+
+            try:
+                offers = await state.provider.search_round_trip(normalized)
+            except ProviderError as exc:
+                detail = classify_provider_error(str(exc))
+                logger.error("%s (%s -> %s)", detail, normalized.origin, normalized.destination)
+                record_status(key, "error", detail)
+                continue
+
             if not offers:
+                detail = (
+                    "Amadeus devolvió 0 resultados para estas fechas. Puede ser falta de plazas "
+                    "o un caché temporal tras una consulta reciente."
+                )
                 logger.info(
-                    "Sin resultados para %s -> %s (%s-%s)",
-                    normalized.origin,
-                    normalized.destination,
+                    "%s (%s - %s)",
+                    detail,
                     normalized.departure_date,
                     normalized.return_date,
                 )
+                record_status(key, "empty", detail)
                 continue
 
             best_offer = min(offers, key=lambda offer: offer.total_price)
-            key = f"{normalized.departure_date}:{normalized.return_date}"
             record_offer(key, best_offer)
+            record_status(
+                key,
+                "ok",
+                f"{len(offers)} ofertas reales recibidas; mejor {best_offer.total_price:.2f} {best_offer.currency}",
+            )
 
             below_threshold = best_offer.total_price <= config.DEFAULT_PRICE_THRESHOLD
             if below_threshold:
@@ -102,6 +131,8 @@ async def monitor_prices():
 
 @app.on_event("startup")
 async def on_startup() -> None:
+    seed_target_windows()
+    ensure_pending_statuses()
     try:
         state.provider = build_provider()
     except ProviderError as exc:
@@ -144,17 +175,38 @@ async def get_latest_offers() -> Dict[str, FlightOffer]:
     return state.latest_offers
 
 
+@app.get("/status")
+async def get_status_snapshot() -> Dict[str, Dict]:
+    return {
+        "windows": serialize_windows(),
+        "offers": serialize_offers(),
+        "statuses": serialize_statuses(),
+    }
+
+
 async def monitor_once() -> None:
     if state.provider is None:
         logger.error("Proveedor no inicializado; no se ejecuta búsqueda")
         return
     for window in config.TARGET_WINDOWS:
         normalized = normalize_request(window)
-        offers = await state.provider.search_round_trip(normalized)
+        key = window_key(normalized)
+        try:
+            offers = await state.provider.search_round_trip(normalized)
+        except ProviderError as exc:
+            record_status(key, "error", classify_provider_error(str(exc)))
+            continue
+
         if offers:
             best_offer = min(offers, key=lambda offer: offer.total_price)
-            key = f"{normalized.departure_date}:{normalized.return_date}"
             record_offer(key, best_offer)
+            record_status(key, "ok", f"{len(offers)} ofertas reales; mejor {best_offer.total_price:.2f} {best_offer.currency}")
+        else:
+            record_status(
+                key,
+                "empty",
+                "Amadeus devolvió 0 resultados (sin disponibilidad o llamada reciente).",
+            )
 
 
 @app.post("/search", response_model=List[FlightOffer])
@@ -162,10 +214,30 @@ async def search_custom(request: FlightSearchRequest) -> List[FlightOffer]:
     normalized = normalize_request(request)
     if state.provider is None:
         raise HTTPException(status_code=503, detail="Proveedor Amadeus no configurado")
-    offers = await state.provider.search_round_trip(normalized)
+    key = window_key(normalized)
+    state.target_windows[key] = normalized
+    record_status(key, "running", "Búsqueda puntual solicitada (Amadeus)")
+    try:
+        offers = await state.provider.search_round_trip(normalized)
+    except ProviderError as exc:
+        detail = classify_provider_error(str(exc))
+        record_status(key, "error", detail)
+        raise HTTPException(status_code=503, detail=detail)
+
     if offers:
-        key = f"{normalized.departure_date}:{normalized.return_date}"
-        record_offer(key, min(offers, key=lambda offer: offer.total_price))
+        best_offer = min(offers, key=lambda offer: offer.total_price)
+        record_offer(key, best_offer)
+        record_status(
+            key,
+            "ok",
+            f"{len(offers)} ofertas reales; mejor {best_offer.total_price:.2f} {best_offer.currency}",
+        )
+    else:
+        record_status(
+            key,
+            "empty",
+            "Amadeus devolvió 0 resultados (sin disponibilidad o llamada reciente).",
+        )
     return offers
 
 
@@ -174,13 +246,16 @@ async def offers_stream() -> StreamingResponse:
     queue: asyncio.Queue[str] = asyncio.Queue()
     state.subscribers.append(queue)
 
-    snapshot = json.dumps(
-        {
-            "type": "snapshot",
-            "offers": serialize_offers(),
-        }
+    await queue.put(
+        json.dumps(
+            {
+                "type": "snapshot",
+                "offers": serialize_offers(),
+                "statuses": serialize_statuses(),
+                "windows": serialize_windows(),
+            }
+        )
     )
-    await queue.put(snapshot)
 
     async def event_generator() -> AsyncGenerator[str, None]:
         try:
@@ -214,20 +289,19 @@ def normalize_request(request: FlightSearchRequest) -> FlightSearchRequest:
     )
 
 
+def record_status(key: str, status: str, detail: str) -> None:
+    state.latest_status[key] = MonitorStatus(
+        status=status,
+        detail=detail,
+        checked_at=datetime.now(ZoneInfo(config.LOCAL_TIMEZONE)).isoformat(),
+    )
+    broadcast_update("status")
+
+
 def record_offer(key: str, offer: FlightOffer) -> None:
     state.latest_offers[key] = offer
     state.latest_updated_at[key] = datetime.now(ZoneInfo(config.LOCAL_TIMEZONE)).isoformat()
-    message = json.dumps(
-        {
-            "type": "offer",
-            "key": key,
-            "offer": offer.model_dump(),
-            "updated_at": state.latest_updated_at[key],
-            "offers": serialize_offers(),
-        }
-    )
-    for subscriber in list(state.subscribers):
-        subscriber.put_nowait(message)
+    broadcast_update("offer")
 
 
 def serialize_offers() -> Dict[str, Dict]:
@@ -235,6 +309,55 @@ def serialize_offers() -> Dict[str, Dict]:
         key: {**offer.model_dump(), "updated_at": state.latest_updated_at.get(key)}
         for key, offer in state.latest_offers.items()
     }
+
+
+def serialize_statuses() -> Dict[str, Dict]:
+    return {key: status.model_dump() for key, status in state.latest_status.items()}
+
+
+def serialize_windows() -> Dict[str, Dict]:
+    return {
+        key: {
+            "origin": window.origin,
+            "destination": window.destination,
+            "departure_date": str(window.departure_date),
+            "return_date": str(window.return_date),
+            "preferred_stop": window.preferred_stop,
+            "max_layover_hours": window.max_layover_hours,
+        }
+        for key, window in state.target_windows.items()
+    }
+
+
+def broadcast_update(event_type: str) -> None:
+    payload = json.dumps(
+        {
+            "type": event_type,
+            "offers": serialize_offers(),
+            "statuses": serialize_statuses(),
+            "windows": serialize_windows(),
+        }
+    )
+    for subscriber in list(state.subscribers):
+        subscriber.put_nowait(payload)
+
+
+def classify_provider_error(message: str) -> str:
+    lowered = message.lower()
+    if "429" in message or "too many" in lowered or "rate" in lowered:
+        return (
+            "Amadeus limitó la petición (429/Rate Limit). "
+            f"El monitor reintenta cada {config.DEFAULT_CHECK_INTERVAL_MINUTES} minutos."
+        )
+    if "auth" in lowered or "token" in lowered:
+        return "Amadeus rechazó las credenciales (revisa client id/secret)."
+    return f"No se pudo recuperar precios reales de Amadeus: {message}"
+
+
+def ensure_pending_statuses() -> None:
+    for key in state.target_windows:
+        if key not in state.latest_status:
+            record_status(key, "pending", "Esperando primera consulta de Amadeus")
 
 
 def build_homepage() -> str:
@@ -377,35 +500,48 @@ def build_homepage() -> str:
           setTimeout(() => { toast.style.display = 'none'; }, 2500);
         }
 
-        function renderOffers(offers) {
-          const entries = Object.entries(offers || {});
-          if (!entries.length) {
+        function renderOffers(payload) {
+          const offers = payload.offers || {};
+          const statuses = payload.statuses || {};
+          const windows = payload.windows || {};
+          const keys = [...new Set([...Object.keys(windows), ...Object.keys(statuses), ...Object.keys(offers)])];
+          if (!keys.length) {
             grid.innerHTML = '<div class="card"><div class="price">Sin datos todavía</div><div class="small">Espera al primer ciclo del monitor…</div></div>';
             return;
           }
-          grid.innerHTML = entries.map(([key, offer]) => {
-            const [departure, ret] = key.split(':');
-            const good = offer.total_price <= 1000;
-            const links = (offer.purchase_links || []).map(link => `
+
+          grid.innerHTML = keys.map((key) => {
+            const win = windows[key] || {};
+            const offer = offers[key];
+            const status = statuses[key] || { status: 'pending', detail: 'Esperando primera consulta', checked_at: null };
+            const good = offer ? offer.total_price <= 1000 : false;
+            const links = offer && (offer.purchase_links || []).map(link => `
               <a class="link-btn" href="${link.url}" target="_blank" rel="noopener noreferrer">${link.name}</a>
-            `).join('');
+            `).join('') || '';
+            const departure = win.departure_date || key.split(':')[0];
+            const ret = win.return_date || key.split(':')[1];
+            const badgeClass = status.status === 'ok' && good ? 'good' : (status.status === 'error' ? 'warning' : '');
+            const badgeText = offer
+              ? (good ? '✅ Bajo umbral' : '↗ Precio monitorizado')
+              : (status.status === 'error' ? '⚠️ Error al obtener precios' : '⏳ Buscando en Amadeus');
+            const segments = offer ? offer.segments.map(seg => `
+              <div class="segment">
+                <div>${seg.origin} → ${seg.destination}</div>
+                <div class="small">${formatDateTime(seg.departure_time)} · ${seg.layover_hours ? seg.layover_hours + 'h escala' : ''}</div>
+              </div>`).join('') : '<div class="small">Sin segmentos disponibles todavía</div>';
+
             return `
               <div class="card">
                 <div class="meta">
                   <div><strong>${departure}</strong> → <strong>${ret}</strong></div>
-                  <span class="badge ${good ? 'good' : ''}">${good ? '✅ Bajo umbral' : '↗ Precio monitorizado'}</span>
+                  <span class="badge ${badgeClass}">${badgeText}</span>
                 </div>
-                <div class="price">${offer.total_price.toFixed(2)} ${offer.currency} · ${offer.airline}</div>
-                <div class="small">Proveedor: ${offer.provider} · Escala preferida: ${offer.preferred_stop_matched ? 'sí' : 'no'}</div>
-                <div class="segments">
-                  ${offer.segments.map(seg => `
-                    <div class="segment">
-                      <div>${seg.origin} → ${seg.destination}</div>
-                      <div class="small">${formatDateTime(seg.departure_time)} · ${seg.layover_hours ? seg.layover_hours + 'h escala' : ''}</div>
-                    </div>`).join('')}
-                </div>
-                <div class="links">${links || '<span class="small">Añade un proveedor real para enlaces directos.</span>'}</div>
-                <div class="meta"><span class="small">Última actualización</span><span class="small">${formatTime(offer.updated_at)}</span></div>
+                <div class="price">${offer ? `${offer.total_price.toFixed(2)} ${offer.currency} · ${offer.airline}` : 'Sin oferta disponible aún'}</div>
+                <div class="small">${offer ? `Proveedor: ${offer.provider} · Escala preferida: ${offer.preferred_stop_matched ? 'sí' : 'no'}` : 'Esperando datos reales de Amadeus'}</div>
+                <div class="segments">${segments}</div>
+                <div class="links">${links || '<span class="small">En cuanto llegue una oferta verás aquí enlaces de compra (Google Flights, Skyscanner, Kayak).</span>'}</div>
+                <div class="meta"><span class="small">Último estado</span><span class="small">${status.checked_at ? formatTime(status.checked_at) : '—'}</span></div>
+                <div class="small">${status.detail || ''}</div>
               </div>
             `;
           }).join('');
@@ -435,8 +571,8 @@ def build_homepage() -> str:
           es.onmessage = (event) => {
             if (!event.data) return;
             const payload = JSON.parse(event.data);
-            if (payload.type === 'snapshot' || payload.type === 'offer') {
-              renderOffers(payload.offers);
+            if (['snapshot', 'offer', 'status'].includes(payload.type)) {
+              renderOffers(payload);
               if (payload.type === 'offer') showToast('Nueva actualización recibida');
             }
           };
@@ -455,7 +591,7 @@ def build_homepage() -> str:
           }
         }
 
-        renderOffers({});
+        renderOffers({ offers: {}, statuses: {}, windows: {} });
         checkHealth();
         connectSSE();
       </script>
