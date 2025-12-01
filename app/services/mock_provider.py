@@ -14,6 +14,13 @@ class MockFlightProvider(FlightProvider):
     def __init__(self, base_price: float = 920.0, volatility: float = 120.0):
         self.base_price = base_price
         self.volatility = volatility
+        self.airlines = [
+            "Iberia",
+            "LATAM",
+            "Air Europa",
+            "KLM",
+            "Lufthansa",
+        ]
 
     async def search_round_trip(self, request: FlightSearchRequest) -> List[FlightOffer]:
         distance_factor = 1.15  # Malaga -> Quito is long-haul; adjust base price
@@ -26,6 +33,8 @@ class MockFlightProvider(FlightProvider):
         seed_value = sum(ord(c) for c in f"{request.departure_date}{request.return_date}")
         oscillation = math.sin(seed_value) * self.volatility
         total_price = max(450.0, self.base_price * distance_factor * length_factor + oscillation + stop_match_bonus)
+
+        airline = self.airlines[seed_value % len(self.airlines)]
 
         layover = min(request.max_layover_hours or 3.0, 5.0)
         departure_time = datetime.combine(request.departure_date, datetime.min.time()) + timedelta(hours=8)
@@ -62,6 +71,7 @@ class MockFlightProvider(FlightProvider):
 
         offer = FlightOffer(
             provider="mock",
+            airline=airline,
             currency="EUR",
             total_price=round(total_price, 2),
             segments=segments,

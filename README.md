@@ -27,6 +27,7 @@ uvicorn app.main:app --reload
 - `/targets`: devuelve las combinaciones de fechas configuradas.
 - `/offers`: consulta el mejor precio almacenado por el monitor (si aún no hay datos, ejecuta una búsqueda rápida).
 - `/search`: POST con un cuerpo `FlightSearchRequest` para lanzar búsquedas ad-hoc.
+- `/` (UI): panel web ligero con las ofertas, compañía aérea, formulario de búsqueda y actualizaciones en tiempo real vía SSE.
 
 Las variables de entorno permiten ajustar el comportamiento:
 

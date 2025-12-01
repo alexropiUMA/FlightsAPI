@@ -16,6 +16,7 @@ class FlightSegment(BaseModel):
 
 class FlightOffer(BaseModel):
     provider: str
+    airline: str
     currency: str
     total_price: float
     segments: List[FlightSegment]
