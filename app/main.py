@@ -372,12 +372,22 @@ def ensure_pending_statuses() -> None:
 
 
 def build_homepage() -> str:
-    return """
+    ensure_pending_statuses()
+
+    initial_payload = json.dumps(
+        {
+            "offers": serialize_offers(),
+            "statuses": serialize_statuses(),
+            "windows": serialize_windows(),
+        }
+    )
+
+    html = """
     <!DOCTYPE html>
-    <html lang=\"es\">
+    <html lang="es">
     <head>
-      <meta charset=\"UTF-8\" />
-      <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       <title>FlightsAPI - Monitor en vivo</title>
       <style>
         :root {
@@ -501,6 +511,7 @@ def build_homepage() -> str:
         const connection = document.getElementById('connection');
         const toast = document.getElementById('toast');
         const TIMEZONE = '{config.LOCAL_TIMEZONE}';
+        const INITIAL_DATA = __INITIAL_DATA__;
 
         const formatDateTime = (value) => value ? new Date(value).toLocaleString('es-ES', { timeZone: TIMEZONE }) : '—';
         const formatTime = (value) => value ? new Date(value).toLocaleTimeString('es-ES', { timeZone: TIMEZONE }) : '—';
@@ -602,10 +613,14 @@ def build_homepage() -> str:
           }
         }
 
-        renderOffers({ offers: {}, statuses: {}, windows: {} });
+        renderOffers(INITIAL_DATA);
         checkHealth();
         connectSSE();
       </script>
     </body>
     </html>
     """
+
+    return html.replace("{config.LOCAL_TIMEZONE}", config.LOCAL_TIMEZONE).replace(
+        "__INITIAL_DATA__", initial_payload
+    )
