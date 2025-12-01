@@ -13,6 +13,7 @@ API ligera en FastAPI para monitorizar vuelos Málaga (AGP) → Quito (UIO) con 
 
 ## Requisitos
 - Python 3.9–3.13
+- Zona horaria: en Windows instala `tzdata` (viene por defecto en Linux/macOS) para que `Europe/Madrid` funcione y las horas se muestren correctamente.
 
 Instala dependencias (si vienes de una versión anterior, vuelve a instalar para recoger la actualización a Pydantic 2.x y Amadeus):
 

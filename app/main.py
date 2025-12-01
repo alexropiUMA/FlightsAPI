@@ -5,7 +5,7 @@ import contextlib
 import json
 import logging
 from datetime import datetime
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from typing import AsyncGenerator, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException
@@ -43,6 +43,17 @@ state = AppState(
     provider=None,  # initialized on startup
     notifier=NotificationService(recipients=config.EMAIL_RECIPIENTS),
 )
+
+
+def local_zone() -> ZoneInfo:
+    try:
+        return ZoneInfo(config.LOCAL_TIMEZONE)
+    except ZoneInfoNotFoundError:
+        logger.warning(
+            "Zona horaria %s no encontrada; usando UTC. Instala 'tzdata' en entornos Windows",
+            config.LOCAL_TIMEZONE,
+        )
+        return ZoneInfo("UTC")
 
 
 def window_key(request: FlightSearchRequest) -> str:
@@ -293,14 +304,14 @@ def record_status(key: str, status: str, detail: str) -> None:
     state.latest_status[key] = MonitorStatus(
         status=status,
         detail=detail,
-        checked_at=datetime.now(ZoneInfo(config.LOCAL_TIMEZONE)).isoformat(),
+        checked_at=datetime.now(local_zone()).isoformat(),
     )
     broadcast_update("status")
 
 
 def record_offer(key: str, offer: FlightOffer) -> None:
     state.latest_offers[key] = offer
-    state.latest_updated_at[key] = datetime.now(ZoneInfo(config.LOCAL_TIMEZONE)).isoformat()
+    state.latest_updated_at[key] = datetime.now(local_zone()).isoformat()
     broadcast_update("offer")
 
 
