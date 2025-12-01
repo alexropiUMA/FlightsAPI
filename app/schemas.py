@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, model_validator
 
 
 class FlightSegment(BaseModel):
@@ -30,12 +30,11 @@ class FlightSearchRequest(BaseModel):
     preferred_stop: Optional[str] = None
     max_layover_hours: Optional[float] = None
 
-    @validator("return_date")
-    def validate_return_after_departure(cls, return_date: date, values: dict) -> date:
-        departure_date: date | None = values.get("departure_date")
-        if departure_date and return_date <= departure_date:
+    @model_validator(mode="after")
+    def validate_return_after_departure(self) -> "FlightSearchRequest":
+        if self.return_date <= self.departure_date:
             raise ValueError("Return date must be after departure date")
-        return return_date
+        return self
 
 
 class PriceAlert(BaseModel):

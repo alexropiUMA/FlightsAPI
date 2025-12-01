@@ -9,9 +9,9 @@ API ligera en FastAPI para monitorizar vuelos Málaga (AGP) → Quito (UIO) con 
 - **Proveedor simulado**: `MockFlightProvider` devuelve resultados deterministas para facilitar pruebas locales. Puedes sustituirlo por un proveedor real integrando APIs externas.
 
 ## Requisitos
-- Python 3.11+
+- Python 3.9–3.13
 
-Instala dependencias:
+Instala dependencias (si vienes de una versión anterior, vuelve a instalar para recoger la actualización a Pydantic 2.x):
 
 ```bash
 pip install -r requirements.txt
