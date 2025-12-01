@@ -11,7 +11,14 @@ DEFAULT_DESTINATION = "UIO"  # Quito
 DEFAULT_PREFERRED_STOP = "MAD"
 DEFAULT_MAX_LAYOVER_HOURS = 5.0
 DEFAULT_PRICE_THRESHOLD = float(os.getenv("PRICE_THRESHOLD", 1000))
-DEFAULT_CHECK_INTERVAL_MINUTES = int(os.getenv("CHECK_INTERVAL_MINUTES", 60))
+DEFAULT_CHECK_INTERVAL_MINUTES = int(os.getenv("CHECK_INTERVAL_MINUTES", 15))
+
+EMAIL_SENDER = os.getenv("EMAIL_SENDER", "alerts@example.com")
+EMAIL_RECIPIENTS = [email.strip() for email in os.getenv("EMAIL_RECIPIENTS", "alexropi00@gmail.com").split(",") if email.strip()]
+SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
+SMTP_USERNAME = os.getenv("SMTP_USERNAME", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 
 
 # Date windows requested by the user

@@ -31,7 +31,10 @@ class AppState:
         self.monitor_task: Optional[asyncio.Task] = None
 
 
-state = AppState(provider=MockFlightProvider(), notifier=NotificationService())
+state = AppState(
+    provider=MockFlightProvider(),
+    notifier=NotificationService(recipients=config.EMAIL_RECIPIENTS),
+)
 
 
 async def monitor_prices():
