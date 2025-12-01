@@ -4,7 +4,7 @@ import math
 from datetime import datetime, timedelta
 from typing import List
 
-from app.schemas import FlightOffer, FlightSearchRequest, FlightSegment
+from app.schemas import FlightOffer, FlightSearchRequest, FlightSegment, PurchaseLink
 from app.services.flight_provider import FlightProvider
 
 
@@ -69,6 +69,8 @@ class MockFlightProvider(FlightProvider):
             ),
         ]
 
+        purchase_links = self._build_purchase_links(request)
+
         offer = FlightOffer(
             provider="mock",
             airline=airline,
@@ -76,6 +78,33 @@ class MockFlightProvider(FlightProvider):
             total_price=round(total_price, 2),
             segments=segments,
             preferred_stop_matched=True,
+            purchase_links=purchase_links,
         )
 
         return [offer]
+
+    def _build_purchase_links(self, request: FlightSearchRequest) -> list[PurchaseLink]:
+        dep = request.departure_date.strftime("%Y%m%d")
+        ret = request.return_date.strftime("%Y%m%d")
+        base_query = f"{request.origin}/{request.destination}/{dep}/{ret}"
+        return [
+            PurchaseLink(
+                name="Google Flights",
+                url=(
+                    "https://www.google.com/travel/flights?q="
+                    f"Flights%20from%20{request.origin}%20to%20{request.destination}%20on%20{request.departure_date}"
+                    f"%20return%20{request.return_date}"
+                ),
+            ),
+            PurchaseLink(
+                name="Skyscanner",
+                url=f"https://www.skyscanner.es/transporte/vuelos/{base_query}/",
+            ),
+            PurchaseLink(
+                name="Kayak",
+                url=(
+                    "https://www.kayak.es/flights/"
+                    f"{request.origin}-{request.destination}/{request.departure_date}/{request.return_date}?fs=stops=0,1"
+                ),
+            ),
+        ]

@@ -7,6 +7,7 @@ API ligera en FastAPI para monitorizar vuelos Málaga (AGP) → Quito (UIO) con 
 - **Filtro de escala**: se privilegia Madrid y se limita el tiempo de escala a 5 h en el proveedor de ejemplo.
 - **Monitor de precios**: tarea de fondo que revisa periódicamente (por defecto cada 15 minutos) y genera alertas cuando el mejor precio está por debajo de 1000 €.
 - **Proveedor simulado**: `MockFlightProvider` devuelve resultados deterministas para facilitar pruebas locales. Puedes sustituirlo por un proveedor real integrando APIs externas.
+- **Enlaces rápidos de compra**: cada oferta incluye accesos a búsquedas en Google Flights, Skyscanner y Kayak para que compares precios reales.
 
 ## Requisitos
 - Python 3.9–3.13
@@ -76,7 +77,7 @@ Para mantenerlo en ejecución tras cerrar la terminal puedes usar `tmux`, `scree
 
 ## Personalización del proveedor
 
-El proveedor actual (`MockFlightProvider`) se encuentra en `app/services/mock_provider.py`. Para conectar con un servicio real, implementa `FlightProvider.search_round_trip` en un nuevo módulo y reemplaza la instancia creada en `app/main.py`.
+El proveedor actual (`MockFlightProvider`) se encuentra en `app/services/mock_provider.py` y genera datos sintéticos (no provienen de ninguna API real). Para conectar con un servicio real, implementa `FlightProvider.search_round_trip` en un nuevo módulo y reemplaza la instancia creada en `app/main.py`.
 
 ## Notificaciones
 

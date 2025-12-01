@@ -300,6 +300,9 @@ def build_homepage() -> str:
         .segments { display: grid; gap: 6px; font-size: 14px; color: #d4ddf4; }
         .segment { display: flex; justify-content: space-between; align-items: center; }
         .small { color: var(--muted); font-size: 12px; }
+        .links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+        .link-btn { background: rgba(79,156,249,0.15); color: var(--text); padding: 8px 12px; border-radius: 10px; text-decoration: none; font-weight: 700; border: 1px solid rgba(79,156,249,0.35); }
+        .link-btn:hover { border-color: rgba(61,213,152,0.6); color: var(--success); }
         .search-form { background: var(--card); padding: 16px; border-radius: 14px; margin-bottom: 16px; border:1px solid rgba(255,255,255,0.05); display:grid; gap:12px; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); }
         .search-form input { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08); background: rgba(0,0,0,0.15); color: var(--text); }
         .search-form button { grid-column: -1 / 1; padding: 12px 16px; border-radius: 12px; border: none; background: linear-gradient(90deg, #4f9cf9, #3dd598); color: #041024; font-weight: 800; cursor: pointer; }
@@ -350,6 +353,9 @@ def build_homepage() -> str:
           grid.innerHTML = entries.map(([key, offer]) => {
             const [departure, ret] = key.split(':');
             const good = offer.total_price <= 1000;
+            const links = (offer.purchase_links || []).map(link => `
+              <a class="link-btn" href="${link.url}" target="_blank" rel="noopener noreferrer">${link.name}</a>
+            `).join('');
             return `
               <div class="card">
                 <div class="meta">
@@ -365,6 +371,7 @@ def build_homepage() -> str:
                       <div class="small">${new Date(seg.departure_time).toLocaleString()} · ${seg.layover_hours ? seg.layover_hours + 'h escala' : ''}</div>
                     </div>`).join('')}
                 </div>
+                <div class="links">${links || '<span class="small">Añade un proveedor real para enlaces directos.</span>'}</div>
                 <div class="meta"><span class="small">Última actualización</span><span class="small">${offer.updated_at ? new Date(offer.updated_at).toLocaleTimeString() : '—'}</span></div>
               </div>
             `;

@@ -14,6 +14,11 @@ class FlightSegment(BaseModel):
     layover_hours: Optional[float] = Field(None, description="Layover time after this segment, in hours")
 
 
+class PurchaseLink(BaseModel):
+    name: str = Field(..., description="Label for the booking site")
+    url: str = Field(..., description="Direct link to search or booking page")
+
+
 class FlightOffer(BaseModel):
     provider: str
     airline: str
@@ -21,6 +26,7 @@ class FlightOffer(BaseModel):
     total_price: float
     segments: List[FlightSegment]
     preferred_stop_matched: bool
+    purchase_links: List[PurchaseLink] = Field(default_factory=list)
 
 
 class FlightSearchRequest(BaseModel):
