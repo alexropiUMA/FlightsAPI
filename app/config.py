@@ -24,11 +24,11 @@ SMTP_CONFIGURED = bool(SMTP_HOST and SMTP_USERNAME and SMTP_PASSWORD and EMAIL_S
 
 # Date windows requested by the user
 TARGET_WINDOWS: List[FlightSearchRequest] = [
-    FlightSearchRequest(origin=DEFAULT_ORIGIN, destination=DEFAULT_DESTINATION, departure_date=date(2024, 7, 1), return_date=date(2024, 7, 20), preferred_stop=DEFAULT_PREFERRED_STOP, max_layover_hours=DEFAULT_MAX_LAYOVER_HOURS),
-    FlightSearchRequest(origin=DEFAULT_ORIGIN, destination=DEFAULT_DESTINATION, departure_date=date(2024, 7, 1), return_date=date(2024, 7, 21), preferred_stop=DEFAULT_PREFERRED_STOP, max_layover_hours=DEFAULT_MAX_LAYOVER_HOURS),
-    FlightSearchRequest(origin=DEFAULT_ORIGIN, destination=DEFAULT_DESTINATION, departure_date=date(2024, 7, 1), return_date=date(2024, 7, 19), preferred_stop=DEFAULT_PREFERRED_STOP, max_layover_hours=DEFAULT_MAX_LAYOVER_HOURS),
-    FlightSearchRequest(origin=DEFAULT_ORIGIN, destination=DEFAULT_DESTINATION, departure_date=date(2024, 7, 1), return_date=date(2024, 7, 18), preferred_stop=DEFAULT_PREFERRED_STOP, max_layover_hours=DEFAULT_MAX_LAYOVER_HOURS),
-    FlightSearchRequest(origin=DEFAULT_ORIGIN, destination=DEFAULT_DESTINATION, departure_date=date(2024, 6, 30), return_date=date(2024, 7, 19), preferred_stop=DEFAULT_PREFERRED_STOP, max_layover_hours=DEFAULT_MAX_LAYOVER_HOURS),
-    FlightSearchRequest(origin=DEFAULT_ORIGIN, destination=DEFAULT_DESTINATION, departure_date=date(2024, 6, 30), return_date=date(2024, 7, 20), preferred_stop=DEFAULT_PREFERRED_STOP, max_layover_hours=DEFAULT_MAX_LAYOVER_HOURS),
-    FlightSearchRequest(origin=DEFAULT_ORIGIN, destination=DEFAULT_DESTINATION, departure_date=date(2024, 6, 30), return_date=date(2024, 7, 18), preferred_stop=DEFAULT_PREFERRED_STOP, max_layover_hours=DEFAULT_MAX_LAYOVER_HOURS),
+    FlightSearchRequest(origin=DEFAULT_ORIGIN, destination=DEFAULT_DESTINATION, departure_date=date(2026, 7, 1), return_date=date(2026, 7, 20), preferred_stop=DEFAULT_PREFERRED_STOP, max_layover_hours=DEFAULT_MAX_LAYOVER_HOURS),
+    FlightSearchRequest(origin=DEFAULT_ORIGIN, destination=DEFAULT_DESTINATION, departure_date=date(2026, 7, 1), return_date=date(2026, 7, 21), preferred_stop=DEFAULT_PREFERRED_STOP, max_layover_hours=DEFAULT_MAX_LAYOVER_HOURS),
+    FlightSearchRequest(origin=DEFAULT_ORIGIN, destination=DEFAULT_DESTINATION, departure_date=date(2026, 7, 1), return_date=date(2026, 7, 19), preferred_stop=DEFAULT_PREFERRED_STOP, max_layover_hours=DEFAULT_MAX_LAYOVER_HOURS),
+    FlightSearchRequest(origin=DEFAULT_ORIGIN, destination=DEFAULT_DESTINATION, departure_date=date(2026, 7, 1), return_date=date(2026, 7, 18), preferred_stop=DEFAULT_PREFERRED_STOP, max_layover_hours=DEFAULT_MAX_LAYOVER_HOURS),
+    FlightSearchRequest(origin=DEFAULT_ORIGIN, destination=DEFAULT_DESTINATION, departure_date=date(2026, 6, 30), return_date=date(2026, 7, 19), preferred_stop=DEFAULT_PREFERRED_STOP, max_layover_hours=DEFAULT_MAX_LAYOVER_HOURS),
+    FlightSearchRequest(origin=DEFAULT_ORIGIN, destination=DEFAULT_DESTINATION, departure_date=date(2026, 6, 30), return_date=date(2026, 7, 20), preferred_stop=DEFAULT_PREFERRED_STOP, max_layover_hours=DEFAULT_MAX_LAYOVER_HOURS),
+    FlightSearchRequest(origin=DEFAULT_ORIGIN, destination=DEFAULT_DESTINATION, departure_date=date(2026, 6, 30), return_date=date(2026, 7, 18), preferred_stop=DEFAULT_PREFERRED_STOP, max_layover_hours=DEFAULT_MAX_LAYOVER_HOURS),
 ]
