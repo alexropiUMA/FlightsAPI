@@ -81,6 +81,8 @@ async def monitor_prices():
         return
     logger.info("Iniciando monitor de precios para %s combinaciones", len(config.TARGET_WINDOWS))
     while True:
+        cycle_best: List[Dict[str, object]] = []
+        fingerprint_windows: Dict[str, List[str]] = {}
         for window in config.TARGET_WINDOWS:
             normalized = normalize_request(window)
             key = window_key(normalized)
@@ -116,6 +118,25 @@ async def monitor_prices():
                 f"{len(offers)} ofertas reales recibidas; mejor {best_offer.total_price:.2f} {best_offer.currency}",
             )
 
+            combo_label = f"{normalized.departure_date}->{normalized.return_date}"
+            for offer in offers:
+                fp = resolve_fingerprint(offer)
+                if fp:
+                    fingerprint_windows.setdefault(fp, []).append(combo_label)
+
+            best_fp = resolve_fingerprint(best_offer) or "sin-fp"
+            carrier_summary = best_offer.carrier_summary or best_offer.airline
+            cycle_best.append(
+                {
+                    "departure": str(normalized.departure_date),
+                    "return": str(normalized.return_date),
+                    "price": best_offer.total_price,
+                    "currency": best_offer.currency,
+                    "carrier_summary": carrier_summary,
+                    "fingerprint": best_fp,
+                }
+            )
+
             below_threshold = best_offer.total_price <= config.DEFAULT_PRICE_THRESHOLD
             if below_threshold:
                 alert = PriceAlert(
@@ -136,6 +157,10 @@ async def monitor_prices():
                     best_offer.total_price,
                     config.DEFAULT_PRICE_THRESHOLD,
                 )
+
+        # NEW: resumen de huellas y combinaciones tras el ciclo
+        log_fingerprint_summary(fingerprint_windows)
+        log_price_table(cycle_best)
 
         await asyncio.sleep(config.DEFAULT_CHECK_INTERVAL_MINUTES * 60)
 
@@ -314,6 +339,53 @@ def record_offer(key: str, offer: FlightOffer) -> None:
     state.latest_updated_at[key] = datetime.now(local_zone()).isoformat()
     broadcast_update("offer")
 
+
+def resolve_fingerprint(offer: FlightOffer) -> Optional[str]:
+    """Devuelve la huella del itinerario, usando la del proveedor o derivándola de los segmentos."""
+    if offer.fingerprint:
+        return offer.fingerprint
+    parts: List[str] = []
+    for seg in offer.segments:
+        parts.append(f"{seg.origin}-{seg.destination}-{seg.departure_time}-{seg.arrival_time}")
+    return " | ".join(parts) if parts else None
+
+
+def log_fingerprint_summary(fingerprint_windows: Dict[str, List[str]]) -> None:
+    if not fingerprint_windows:
+        logger.info("Sin huellas de itinerario para resumir este ciclo")
+        return
+    logger.info("---- Resumen de huellas de itinerario (Amadeus) ----")
+    logger.info("Itinerarios distintos: %s", len(fingerprint_windows))
+    for fp, combos in fingerprint_windows.items():
+        unique_combos = sorted(set(combos))
+        logger.info("Fingerprint: %s", fp)
+        logger.info("Aparece en: %s", ", ".join(unique_combos))
+
+
+def log_price_table(entries: List[Dict[str, object]]) -> None:
+    if not entries:
+        logger.info("Sin resultados para mostrar tabla de precios")
+        return
+    logger.info("---- Tabla de combinaciones ordenada por precio ----")
+    seen: Dict[str, str] = {}
+    for entry in sorted(entries, key=lambda item: item["price"]):
+        fp = entry.get("fingerprint") or "sin-fp"
+        combo = f"{entry['departure']}->{entry['return']}"
+        status = "unique"
+        if fp in seen:
+            status = f"same as {seen[fp]}"
+        else:
+            seen[fp] = combo
+        logger.info(
+            "%s | %s | %.2f %s | %s | %s | %s",
+            entry["departure"],
+            entry["return"],
+            entry["price"],
+            entry["currency"],
+            entry["carrier_summary"],
+            fp,
+            status,
+        )
 
 def serialize_offers() -> Dict[str, Dict]:
     return {

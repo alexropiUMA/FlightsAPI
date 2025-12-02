@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -8,6 +9,8 @@ from amadeus import Client, ResponseError
 
 from app.schemas import FlightOffer, FlightSearchRequest, FlightSegment, PurchaseLink
 from app.services.flight_provider import FlightProvider, ProviderError
+
+logger = logging.getLogger(__name__)
 
 
 class AmadeusFlightProvider(FlightProvider):
@@ -34,6 +37,14 @@ class AmadeusFlightProvider(FlightProvider):
         return cls(client_id=client_id, client_secret=client_secret)
 
     async def search_round_trip(self, request: FlightSearchRequest) -> List[FlightOffer]:
+        # DEBUG: log de request a Amadeus
+        logger.info(
+            "Request Amadeus: %s -> %s | ida=%s | vuelta=%s",
+            request.origin,
+            request.destination,
+            request.departure_date,
+            request.return_date,
+        )
         try:
             response = await asyncio.to_thread(
                 self.client.shopping.flight_offers_search.get,
@@ -69,6 +80,8 @@ class AmadeusFlightProvider(FlightProvider):
                 total_price = float(total_price_raw)
                 currency = price_block["currency"]
                 itineraries = offer.get("itineraries", [])
+                fingerprint = self._build_fingerprint(itineraries)
+                carrier_summary = self._build_carrier_summary(itineraries)
                 segments = self._build_segments(itineraries)
             except (KeyError, TypeError, ValueError) as exc:
                 continue  # skip malformed offers
@@ -91,6 +104,8 @@ class AmadeusFlightProvider(FlightProvider):
                     currency=currency,
                     total_price=total_price,
                     price_note=note,
+                    carrier_summary=carrier_summary,
+                    fingerprint=fingerprint,
                     segments=segments,
                     preferred_stop_matched=preferred_stop_matched,
                     purchase_links=purchase_links,
@@ -154,6 +169,30 @@ class AmadeusFlightProvider(FlightProvider):
                 if carrier:
                     return carrier
         return None
+
+    # NEW: cálculo de fingerprint de itinerario
+    def _build_fingerprint(self, itineraries: list) -> Optional[str]:
+        parts: List[str] = []
+        for itinerary in itineraries:
+            seg_parts: List[str] = []
+            for segment in itinerary.get("segments", []):
+                carrier = segment.get("carrierCode") or segment.get("marketingCarrier") or "?"
+                number = segment.get("number") or segment.get("flightNumber") or "?"
+                departure_at = segment.get("departure", {}).get("at", "?")
+                arrival_at = segment.get("arrival", {}).get("at", "?")
+                seg_parts.append(f"{carrier}-{number}-{departure_at}-{arrival_at}")
+            if seg_parts:
+                parts.append(" / ".join(seg_parts))
+        return " | ".join(parts) if parts else None
+
+    def _build_carrier_summary(self, itineraries: list) -> Optional[str]:
+        carriers = []
+        for itinerary in itineraries:
+            for segment in itinerary.get("segments", []):
+                carrier = segment.get("carrierCode") or segment.get("marketingCarrier")
+                if carrier and carrier not in carriers:
+                    carriers.append(carrier)
+        return " + ".join(carriers) if carriers else None
 
     def _build_purchase_links(self, request: FlightSearchRequest) -> list[PurchaseLink]:
         dep = request.departure_date.strftime("%Y%m%d")
